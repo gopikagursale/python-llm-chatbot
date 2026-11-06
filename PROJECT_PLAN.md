@@ -1,0 +1,301 @@
+# M1 Project Plan: Terminal Chatbot
+
+## 1) Intended M1 architecture and minimal file structure
+
+M1 is intentionally small: a terminal-based Python app that asks the user for input, sends the text to the OpenAI Responses API, and prints the model's reply. There is no web UI, no chat history, and no streaming.
+
+### Architecture
+
+User -> CLI prompt loop -> config loader (.env/environment) -> LLM client -> OpenAI Responses API -> response.output_text -> terminal output
+
+Key design principles for M1:
+- Keep the API call in a small, testable function.
+- Keep the terminal loop separate from the model call.
+- Use environment variables for secrets and model selection.
+- Treat API failures as normal application errors, not as leaked secrets.
+- Use mocks in tests so no real paid API calls are required.
+
+### Minimal file structure
+
+```text
+ai-chatbot-project-1/
+├── .env.example
+├── .gitignore
+├── AGENTS.md
+├── CLAUDE.md
+├── PROJECT_SPEC.md
+├── PROJECT_PLAN.md
+├── PROMPTS.md
+├── README.md
+├── LEARNING_NOTES.md
+├── requirements.txt
+├── app/
+│   ├── __init__.py
+│   ├── cli.py
+│   ├── config.py
+│   └── llm_client.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_llm_client.py
+│   └── test_cli.py
+└── .venv/   # local virtual environment, not committed
+```
+
+### Responsibilities by file
+
+- `app/config.py`: load `OPENAI_API_KEY` and `OPENAI_MODEL` from environment and `.env`.
+- `app/llm_client.py`: call `client.responses.create(...)` and return `response.output_text`.
+- `app/cli.py`: prompt the user in a loop, ignore blanks, stop on `exit`, and print model responses.
+- `tests/test_llm_client.py`: mock the OpenAI SDK and verify success and failure behavior.
+- `tests/test_cli.py`: verify prompt-loop behavior and graceful handling of empty input.
+- `README.md`: setup steps, usage, and safety notes.
+- `LEARNING_NOTES.md`: concept explanations for M1.
+
+---
+
+## 2) Exact Python dependencies
+
+The project will use Python 3.11+ and a minimal dependency set.
+
+### Core runtime dependencies
+
+```text
+python-dotenv>=1.0.1,<2.0.0
+openai>=1.0.0,<2.0.0
+```
+
+### Dev/test dependencies
+
+```text
+pytest>=8.0.0,<9.0.0
+```
+
+### Why these dependencies
+
+- `openai`: official SDK for the current Responses API.
+- `python-dotenv`: load `.env` values locally without hardcoding secrets.
+- `pytest`: offline test runner for mocked unit tests.
+
+### Recommended install command
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate  # macOS/Linux
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+For Windows PowerShell:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+---
+
+## 3) Environment setup instructions for macOS and Windows
+
+### macOS / Linux
+
+1. Create a virtual environment:
+   ```bash
+   cd /path/to/ai-chatbot-project-1
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+2. Install dependencies:
+   ```bash
+   python -m pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
+3. Create a local `.env` file from `.env.example`:
+   ```bash
+   cp .env.example .env
+   ```
+4. Add your values:
+   ```env
+   OPENAI_API_KEY=your_key_here
+   OPENAI_MODEL=gpt-4o-mini
+   ```
+5. Run the app:
+   ```bash
+   python -m app.cli
+   ```
+
+### Windows
+
+1. Open PowerShell in the project folder:
+   ```powershell
+   cd C:\path\to\ai-chatbot-project-1
+   py -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+2. Install dependencies:
+   ```powershell
+   python -m pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
+3. Copy `.env.example` to `.env` and edit it:
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+4. Set the API key and model in the `.env` file:
+   ```env
+   OPENAI_API_KEY=your_key_here
+   OPENAI_MODEL=gpt-4o-mini
+   ```
+5. Run the app:
+   ```powershell
+   python -m app.cli
+   ```
+
+### Required environment variables
+
+- `OPENAI_API_KEY`: secret API key for calling the model.
+- `OPENAI_MODEL`: model identifier such as `gpt-4o-mini` or another supported model. This project will not hardcode the key.
+
+If either is missing, the app should print a clear message and exit without exposing the key value.
+
+---
+
+## 4) What data is sent to the model and returned
+
+### Data sent to the model
+
+For M1, the request is deliberately minimal.
+
+Example payload sent to the OpenAI Responses API:
+
+```python
+client.responses.create(
+    model="gpt-4o-mini",
+    input="Explain what an API key is in simple terms."
+)
+```
+
+The application sends:
+- the configured model name
+- the user's current prompt text
+- no conversation memory in M1
+- no streaming instructions
+- no long UI state or hidden metadata beyond the standard API request fields
+
+This request is text-only; it does not send the user's full chat history unless M3 adds it later.
+
+### Data returned by the model
+
+The official SDK returns a structured response object. For M1, the relevant part is:
+
+```python
+response.output_text
+```
+
+This is the final text generated by the model and is what the terminal prints to the user.
+
+Other response metadata may include usage and model identifiers, but M1 does not depend on them for the main workflow. The app will not guess or invent missing usage values.
+
+### Why this matters for learning
+
+This is the core AI engineering pattern:
+1. User writes a prompt.
+2. The app sends that prompt to a model endpoint.
+3. The model generates a response.
+4. The app prints the response to the user.
+
+M1 keeps this as clear and explicit as possible.
+
+---
+
+## 5) Tests that mock API responses and require no paid calls
+
+M1 must be testable without any real API key or paid call. The tests will use `pytest` and `unittest.mock` to fake the SDK response object.
+
+### Example test cases
+
+1. Successful response test
+   - Mock the OpenAI client so `client.responses.create()` returns a fake response object.
+   - Assert the app returns `response.output_text` as expected.
+   - Confirm the code uses the configured model and prompt.
+
+2. Blank-input behavior test
+   - Simulate empty prompts or whitespace-only user input.
+   - Assert the CLI or model helper does not call the API for blank text.
+   - Confirm the app continues prompting or ignores the input correctly.
+
+3. API error handling test
+   - Mock the SDK to raise a network or API exception.
+   - Assert the app catches the error, prints a user-friendly message, and does not leak the API key.
+
+4. Missing configuration test (recommended)
+   - Ensure missing `OPENAI_API_KEY` or `OPENAI_MODEL` produces a clear setup message.
+
+### Mocking approach
+
+Use Python's `unittest.mock.MagicMock` or `patch` to replace the OpenAI client logic. This ensures tests are offline and deterministic. No live call should ever be made during `pytest`.
+
+### Test commands
+
+```bash
+pytest -q
+```
+
+The repository should be structured so tests can run with a normal local Python environment and no paid API access.
+
+---
+
+## 6) Definition of done for M1
+
+M1 is complete when all of the following are true:
+
+- The project runs as a Python terminal chatbot.
+- The app prompts repeatedly until the user types `exit`.
+- Empty or whitespace-only input is ignored.
+- `OPENAI_API_KEY` and `OPENAI_MODEL` are loaded from `.env` or environment variables.
+- If either is missing, the app prints a helpful setup message and exits without exposing secrets.
+- The API call is implemented using the official SDK and `client.responses.create(...)`.
+- The app reads `response.output_text` to display the model output.
+- The code separates the API-calling logic from the CLI loop so it can be unit tested.
+- At least 3 pytest tests mock the OpenAI response and pass without paid calls.
+- Errors, including `KeyboardInterrupt`, are handled gracefully.
+- README and LEARNING_NOTES.md explain setup, usage, and the concept of model inference.
+- No M2–M6 features are introduced.
+
+### M1 acceptance summary
+
+The user can start the CLI, type a question, receive a response, ask another question, and exit. No live API call is required to verify the implementation in CI or local tests.
+
+---
+
+## 7) Risks, API-key protection, and billing considerations
+
+### Risks
+
+- API configuration errors: missing or invalid key, bad model name, network outage.
+- User confusion: blank input or accidental Ctrl+C should not crash the program.
+- Secret leakage: logs or error messages may accidentally expose the key.
+- Unclear testing: writing tests that rely on the real network defeats the purpose of offline-safe development.
+- Hidden costs: a live smoke test can incur billing if the API call is made outside the test environment.
+
+### API-key protection
+
+- Never commit `.env` to version control.
+- Use `.env.example` with placeholder values only.
+- Read secrets from environment variables or `.env` at runtime.
+- Never print raw key values, stack traces that include them, or secrets in screenshots.
+- Use `.gitignore` to exclude `.env` and local virtual environment directories.
+
+### Billing considerations
+
+- M1 is designed to avoid accidental billing during test execution.
+- Real API calls are allowed only when the user explicitly wants to smoke test with a live key.
+- Costs vary by model and token usage, so the project should keep the model choice configurable and not hide that fact.
+- For later milestones, usage metadata and cost estimates should be treated carefully and only reported when the API actually returns the data.
+
+---
+
+## Implementation note for this milestone
+
+This plan intentionally avoids writing application code until after the structure and risks are documented. The next milestone step is to implement only the M1 terminal chatbot described here, using the official SDK and mocked tests. No M2–M6 functionality is included in the scope.
