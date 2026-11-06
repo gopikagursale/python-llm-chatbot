@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # AI Chatbot Project
 
 This project is a milestone-based Python AI engineering learning app. It starts with a CLI chatbot, adds a Streamlit web UI, then adds conversation memory and model-selection/streaming features.
